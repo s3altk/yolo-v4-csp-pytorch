@@ -1,7 +1,3 @@
-# This file contains google utils: https://cloud.google.com/storage/docs/reference/libraries
-# pip install --upgrade google-cloud-storage
-# from google.cloud import storage
-
 import os
 import platform
 import time
@@ -35,7 +31,6 @@ def attempt_download(weights):
 
 def gdrive_download(id='1n_oKgR81BJtqk75b00eAjdv03qVCQn2f', name='coco128.zip'):
     # Downloads a file from Google Drive, accepting presented query
-    # from utils.google_utils import *; gdrive_download()
     t = time.time()
 
     print('Downloading https://drive.google.com/uc?export=download&id=%s as %s... ' % (id, name), end='')
