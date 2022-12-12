@@ -27,12 +27,12 @@ for orientation in ExifTags.TAGS.keys():
 
 
 def get_hash(files):
-    # Returns a single hash value of a list of files
+    # Return a single hash value of a list of files
     return sum(os.path.getsize(f) for f in files if os.path.isfile(f))
 
 
 def exif_size(img):
-    # Returns exif-corrected PIL size
+    # Return exif-corrected PIL size
     s = img.size  # (width, height)
     try:
         rotation = dict(img._getexif().items())[orientation]
@@ -72,7 +72,7 @@ def create_dataloader(path, imgsz, batch_size, stride, opt, hyp=None, augment=Fa
 
 
 class LoadImages:  # for inference
-    def __init__(self, path, img_size=640):
+    def __init__(self, path, img_size=608):
         p = str(Path(path))  # os-agnostic
         p = os.path.abspath(p)  # absolute path
         if '*' in p:
@@ -140,7 +140,6 @@ class LoadImages:  # for inference
         img = img[:, :, ::-1].transpose(2, 0, 1)  # BGR to RGB, to 3x416x416
         img = np.ascontiguousarray(img)
 
-        # cv2.imwrite(path + '.letterbox.jpg', 255 * img.transpose((1, 2, 0))[:, :, ::-1])  # save letterbox image
         return path, img, img0, self.cap
 
     def new_video(self, path):
@@ -158,17 +157,6 @@ class LoadWebcam:  # for inference
 
         if pipe == '0':
             pipe = 0  # local camera
-        # pipe = 'rtsp://192.168.1.64/1'  # IP camera
-        # pipe = 'rtsp://username:password@192.168.1.64/1'  # IP camera with login
-        # pipe = 'rtsp://170.93.143.139/rtplive/470011e600ef003a004ee33696235daa'  # IP traffic camera
-        # pipe = 'http://wmccpinetop.axiscam.net/mjpg/video.mjpg'  # IP golf camera
-
-        # https://answers.opencv.org/question/215996/changing-gstreamer-pipeline-to-opencv-in-pythonsolved/
-        # pipe = '"rtspsrc location="rtsp://username:password@192.168.1.64/1" latency=10 ! appsink'  # GStreamer
-
-        # https://answers.opencv.org/question/200787/video-acceleration-gstremer-pipeline-in-videocapture/
-        # https://stackoverflow.com/questions/54095699/install-gstreamer-support-for-opencv-python-package  # install help
-        # pipe = "rtspsrc location=rtsp://root:root@192.168.0.91:554/axis-media/media.amp?videocodec=h264&resolution=3840x2160 protocols=GST_RTSP_LOWER_TRANS_TCP ! rtph264depay ! queue ! vaapih264dec ! videoconvert ! appsink"  # GStreamer
 
         self.pipe = pipe
         self.cap = cv2.VideoCapture(pipe)  # video capture object
@@ -256,7 +244,6 @@ class LoadStreams:  # multiple IP or RTSP cameras
         n = 0
         while cap.isOpened():
             n += 1
-            # _, self.imgs[index] = cap.read()
             cap.grab()
             if n == 4:  # read every 4th frame
                 _, self.imgs[index] = cap.retrieve()
@@ -345,7 +332,7 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
         self.shapes = np.array(shapes, dtype=np.float64)
         self.labels = list(labels)
 
-        # Rectangular Training  https://github.com/ultralytics/yolov3/issues/232
+        # Rectangular Training
         if self.rect:
             # Sort by aspect ratio
             s = self.shapes  # wh
@@ -380,7 +367,7 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
                 assert (l >= 0).all(), 'negative labels: %s' % file
                 assert (l[:, 1:] <= 1).all(), 'non-normalized or out of bounds coordinate labels: %s' % file
                 if np.unique(l, axis=0).shape[0] < l.shape[0]:  # duplicate rows
-                    nd += 1  # print('WARNING: duplicate rows in %s' % self.label_files[i])  # duplicate rows
+                    nd += 1
                 if single_cls:
                     l[:, 0] = 0  # force dataset into single-class mode
                 self.labels[i] = l
@@ -394,7 +381,6 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
                     exclude_classes = 43
                     if exclude_classes not in l[:, 0]:
                         ns += 1
-                        # shutil.copy(src=self.img_files[i], dst='./datasubset/images/')  # copy image
                         with open('./datasubset/images.txt', 'a') as f:
                             f.write(self.img_files[i] + '\n')
 
@@ -417,8 +403,7 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
                         b[[1, 3]] = np.clip(b[[1, 3]], 0, h)
                         assert cv2.imwrite(f, img[b[1]:b[3], b[0]:b[2]]), 'Failure extracting classifier boxes'
             else:
-                ne += 1  # print('empty labels for image %s' % self.img_files[i])  # file empty
-                # os.system("rm '%s' '%s'" % (self.img_files[i], self.label_files[i]))  # remove
+                ne += 1
 
             pbar.desc = 'Scanning labels %s (%g found, %g missing, %g empty, %g duplicate, for %g images)' % (
                 cache_path, nf, nm, ne, nd, n)
@@ -447,7 +432,6 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
                 l = []
                 image = Image.open(img)
                 image.verify()  # PIL verify
-                # _ = io.imread(img)  # skimage verify (from skimage import io)
                 shape = exif_size(image)  # image size
                 assert (shape[0] > 9) & (shape[1] > 9), 'image size <10 pixels'
                 if os.path.isfile(label):
@@ -467,12 +451,6 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
     def __len__(self):
         return len(self.img_files)
 
-    # def __iter__(self):
-    #     self.count = -1
-    #     print('ran dataset iter')
-    #     #self.shuffled_vector = np.random.permutation(self.nF) if self.augment else np.arange(self.nF)
-    #     return self
-
     def __getitem__(self, index):
         if self.image_weights:
             index = self.indices[index]
@@ -483,7 +461,7 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
             img, labels = load_mosaic(self, index)
             shapes = None
 
-            # MixUp https://arxiv.org/pdf/1710.09412.pdf
+            # MixUp
             if random.random() < hyp['mixup']:
                 img2, labels2 = load_mosaic(self, random.randint(0, len(self.labels) - 1))
                 r = np.random.beta(8.0, 8.0)  # mixup ratio, alpha=beta=8.0
@@ -522,10 +500,6 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
 
             # Augment colorspace
             augment_hsv(img, hgain=hyp['hsv_h'], sgain=hyp['hsv_s'], vgain=hyp['hsv_v'])
-
-            # Apply cutouts
-            # if random.random() < 0.9:
-            #     labels = cutout(img, labels)
 
         nL = len(labels)  # number of labels
         if nL:
@@ -566,7 +540,6 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
 
 # Ancillary functions --------------------------------------------------------------------------------------------------
 def load_image(self, index):
-    # loads 1 image from dataset, returns img, original hw, resized hw
     img = self.imgs[index]
     if img is None:  # not cached
         path = self.img_files[index]
@@ -595,15 +568,8 @@ def augment_hsv(img, hgain=0.5, sgain=0.5, vgain=0.5):
     img_hsv = cv2.merge((cv2.LUT(hue, lut_hue), cv2.LUT(sat, lut_sat), cv2.LUT(val, lut_val))).astype(dtype)
     cv2.cvtColor(img_hsv, cv2.COLOR_HSV2BGR, dst=img)  # no return needed
 
-    # Histogram equalization
-    # if random.random() < 0.2:
-    #     for i in range(3):
-    #         img[:, :, i] = cv2.equalizeHist(img[:, :, i])
-
 
 def load_mosaic(self, index):
-    # loads images in a mosaic
-
     labels4 = []
     s = self.img_size
     yc, xc = s, s  # mosaic center x, y
@@ -644,14 +610,9 @@ def load_mosaic(self, index):
     # Concat/clip labels
     if len(labels4):
         labels4 = np.concatenate(labels4, 0)
-        # np.clip(labels4[:, 1:] - s / 2, 0, s, out=labels4[:, 1:])  # use with center crop
         np.clip(labels4[:, 1:], 0, 2 * s, out=labels4[:, 1:])  # use with random_affine
 
-        # Replicate
-        # img4, labels4 = replicate(img4, labels4)
-
     # Augment
-    # img4 = img4[s // 2: int(s * 1.5), s // 2:int(s * 1.5)]  # center crop (WARNING, requires box pruning)
     img4, labels4 = random_perspective(img4, labels4,
                                        degrees=self.hyp['degrees'],
                                        translate=self.hyp['translate'],
@@ -681,7 +642,7 @@ def replicate(img, labels):
 
 
 def letterbox(img, new_shape=(640, 640), color=(114, 114, 114), auto=True, scaleFill=False, scaleup=True):
-    # Resize image to a 32-pixel-multiple rectangle https://github.com/ultralytics/yolov3/issues/232
+    # Resize image to a 32-pixel-multiple rectangle
     shape = img.shape[:2]  # current shape [height, width]
     if isinstance(new_shape, int):
         new_shape = (new_shape, new_shape)
@@ -714,9 +675,6 @@ def letterbox(img, new_shape=(640, 640), color=(114, 114, 114), auto=True, scale
 
 
 def random_perspective(img, targets=(), degrees=10, translate=.1, scale=.1, shear=10, perspective=0.0, border=(0, 0)):
-    # torchvision.transforms.RandomAffine(degrees=(-10, 10), translate=(.1, .1), scale=(.9, 1.1), shear=(-10, 10))
-    # targets = [cls, xyxy]
-
     height = img.shape[0] + border[0] * 2  # shape(h,w,c)
     width = img.shape[1] + border[1] * 2
 
@@ -733,9 +691,7 @@ def random_perspective(img, targets=(), degrees=10, translate=.1, scale=.1, shea
     # Rotation and Scale
     R = np.eye(3)
     a = random.uniform(-degrees, degrees)
-    # a += random.choice([-180, -90, 0, 90])  # add 90deg rotations to small rotations
     s = random.uniform(1 - scale, 1 + scale)
-    # s = 2 ** random.uniform(-scale, scale)
     R[:2] = cv2.getRotationMatrix2D(angle=a, center=(0, 0), scale=s)
 
     # Shear
@@ -756,12 +712,6 @@ def random_perspective(img, targets=(), degrees=10, translate=.1, scale=.1, shea
         else:  # affine
             img = cv2.warpAffine(img, M[:2], dsize=(width, height), borderValue=(114, 114, 114))
 
-    # Visualize
-    # import matplotlib.pyplot as plt
-    # ax = plt.subplots(1, 2, figsize=(12, 6))[1].ravel()
-    # ax[0].imshow(img[:, :, ::-1])  # base
-    # ax[1].imshow(img2[:, :, ::-1])  # warped
-
     # Transform label coordinates
     n = len(targets)
     if n:
@@ -778,15 +728,6 @@ def random_perspective(img, targets=(), degrees=10, translate=.1, scale=.1, shea
         x = xy[:, [0, 2, 4, 6]]
         y = xy[:, [1, 3, 5, 7]]
         xy = np.concatenate((x.min(1), y.min(1), x.max(1), y.max(1))).reshape(4, n).T
-
-        # # apply angle-based reduction of bounding boxes
-        # radians = a * math.pi / 180
-        # reduction = max(abs(math.sin(radians)), abs(math.cos(radians))) ** 0.5
-        # x = (xy[:, 2] + xy[:, 0]) / 2
-        # y = (xy[:, 3] + xy[:, 1]) / 2
-        # w = (xy[:, 2] - xy[:, 0]) * reduction
-        # h = (xy[:, 3] - xy[:, 1]) * reduction
-        # xy = np.concatenate((x - w / 2, y - h / 2, x + w / 2, y + h / 2)).reshape(4, n).T
 
         # clip boxes
         xy[:, [0, 2]] = xy[:, [0, 2]].clip(0, width)
@@ -809,11 +750,10 @@ def box_candidates(box1, box2, wh_thr=2, ar_thr=20, area_thr=0.2):  # box1(4,n),
 
 
 def cutout(image, labels):
-    # Applies image cutout augmentation https://arxiv.org/abs/1708.04552
     h, w = image.shape[:2]
 
     def bbox_ioa(box1, box2):
-        # Returns the intersection over box2 area given box1, box2. box1 is 4, box2 is nx4. boxes are x1y1x2y2
+        # Return the intersection over box2 area given box1, box2. box1 is 4, box2 is nx4. boxes are x1y1x2y2
         box2 = box2.transpose()
 
         # Get the coordinates of bounding boxes
@@ -854,8 +794,7 @@ def cutout(image, labels):
     return labels
 
 
-def reduce_img_size(path='path/images', img_size=1024):  # from utils.datasets import *; reduce_img_size()
-    # creates a new ./images_reduced folder with reduced size images of maximum size img_size
+def reduce_img_size(path='path/images', img_size=608):
     path_new = path + '_reduced'  # reduced images path
     create_folder(path_new)
     for f in tqdm(glob.glob('%s/*.*' % path)):
@@ -865,14 +804,14 @@ def reduce_img_size(path='path/images', img_size=1024):  # from utils.datasets i
             r = img_size / max(h, w)  # size ratio
             if r < 1.0:
                 img = cv2.resize(img, (int(w * r), int(h * r)), interpolation=cv2.INTER_AREA)  # _LINEAR fastest
-            fnew = f.replace(path, path_new)  # .replace(Path(f).suffix, '.jpg')
+            fnew = f.replace(path, path_new)
             cv2.imwrite(fnew, img)
         except:
             print('WARNING: image failure %s' % f)
 
 
-def recursive_dataset2bmp(dataset='path/dataset_bmp'):  # from utils.datasets import *; recursive_dataset2bmp()
-    # Converts dataset to bmp (for faster training)
+def recursive_dataset2bmp(dataset='path/dataset_bmp'):
+    # Convert dataset to bmp (for faster training)
     formats = [x.lower() for x in img_formats] + [x.upper() for x in img_formats]
     for a, b, files in os.walk(dataset):
         for file in tqdm(files, desc=a):
@@ -891,8 +830,8 @@ def recursive_dataset2bmp(dataset='path/dataset_bmp'):  # from utils.datasets im
                     os.system("rm '%s'" % p)
 
 
-def imagelist2folder(path='path/images.txt'):  # from utils.datasets import *; imagelist2folder()
-    # Copies all the images in a text file (list of images) into a folder
+def imagelist2folder(path='path/images.txt'):
+    # Copy all the images in a text file (list of images) into a folder
     create_folder(path[:-4])
     with open(path, 'r') as f:
         for line in f.read().splitlines():
