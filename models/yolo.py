@@ -29,7 +29,6 @@ class Detect(nn.Module):
         self.export = False  # onnx export
 
     def forward(self, x):
-        # x = x.copy()  # for profiling
         z = []  # inference output
         self.training |= self.export
         for i in range(self.nl):
@@ -55,7 +54,7 @@ class Detect(nn.Module):
 
 
 class Model(nn.Module):
-    def __init__(self, cfg='yolov4-p5.yaml', ch=3, nc=None):  # model, input channels, number of classes
+    def __init__(self, cfg='yolov4-csp.yaml', ch=3, nc=None):  # model, input channels, number of classes
         super(Model, self).__init__()
         if isinstance(cfg, dict):
             self.yaml = cfg  # model dict
@@ -69,8 +68,8 @@ class Model(nn.Module):
         if nc and nc != self.yaml['nc']:
             print('Overriding %s nc=%g with nc=%g' % (cfg, self.yaml['nc'], nc))
             self.yaml['nc'] = nc  # override yaml value
+
         self.model, self.save = parse_model(deepcopy(self.yaml), ch=[ch])  # model, savelist, ch_out
-        # print([x.shape for x in self.forward(torch.zeros(1, ch, 64, 64))])
 
         # Build strides, anchors
         m = self.model[-1]  # Detect()
@@ -81,7 +80,6 @@ class Model(nn.Module):
             check_anchor_order(m)
             self.stride = m.stride
             self._initialize_biases()  # only run once
-            # print('Strides: %s' % m.stride.tolist())
 
         # Init weights, biases
         initialize_weights(self)
@@ -97,7 +95,6 @@ class Model(nn.Module):
             for si, fi in zip(s, f):
                 xi = scale_img(x.flip(fi) if fi else x, si)
                 yi = self.forward_once(xi)[0]  # forward
-                # cv2.imwrite('img%g.jpg' % s, 255 * xi[0].numpy().transpose((1, 2, 0))[:, :, ::-1])  # save
                 yi[..., :4] /= si  # de-scale
                 if fi == 2:
                     yi[..., 1] = img_size[0] - yi[..., 1]  # de-flip ud
@@ -133,8 +130,7 @@ class Model(nn.Module):
             print('%.1fms total' % sum(dt))
         return x
 
-    def _initialize_biases(self, cf=None):  # initialize biases into Detect(), cf is class frequency
-        # cf = torch.bincount(torch.tensor(np.concatenate(dataset.labels, 0)[:, 0]).long(), minlength=nc) + 1.
+    def _initialize_biases(self, cf=None):
         m = self.model[-1]  # Detect() module
         for mi, s in zip(m.m, m.stride):  # from
             b = mi.bias.view(m.na, -1)  # conv.bias(255) to (3,85)
@@ -147,11 +143,6 @@ class Model(nn.Module):
         for mi in m.m:  # from
             b = mi.bias.detach().view(m.na, -1).T  # conv.bias(255) to (3,85)
             print(('%6g Conv2d.bias:' + '%10.3g' * 6) % (mi.weight.shape[1], *b[:5].mean(1).tolist(), b[5:].mean()))
-
-    # def _print_weights(self):
-    #     for m in self.model.modules():
-    #         if type(m) is Bottleneck:
-    #             print('%10.3g' % (m.w.detach().sigmoid() * 2))  # shortcut weights
 
     def fuse(self):  # fuse model Conv2d() + BatchNorm2d() layers
         print('Fusing layers... ', end='')
@@ -186,25 +177,7 @@ def parse_model(d, ch):  # model_dict, input_channels(3)
         n = max(round(n * gd), 1) if n > 1 else n  # depth gain
         if m in [nn.Conv2d, Conv, Bottleneck, SPP, DWConv, MixConv2d, Focus, CrossConv, BottleneckCSP, BottleneckCSP2, SPPCSP, VoVCSP, C3]:
             c1, c2 = ch[f], args[0]
-
-            # Normal
-            # if i > 0 and args[0] != no:  # channel expansion factor
-            #     ex = 1.75  # exponential (default 2.0)
-            #     e = math.log(c2 / ch[1]) / math.log(2)
-            #     c2 = int(ch[1] * ex ** e)
-            # if m != Focus:
-
             c2 = make_divisible(c2 * gw, 8) if c2 != no else c2
-
-            # Experimental
-            # if i > 0 and args[0] != no:  # channel expansion factor
-            #     ex = 1 + gw  # exponential (default 2.0)
-            #     ch1 = 32  # ch[1]
-            #     e = math.log(c2 / ch1) / math.log(2)  # level 1-n
-            #     c2 = int(ch1 * ex ** e)
-            # if m != Focus:
-            #     c2 = make_divisible(c2, 8) if c2 != no else c2
-
             args = [c1, c2, *args[1:]]
             if m in [BottleneckCSP, BottleneckCSP2, SPPCSP, VoVCSP, C3]:
                 args.insert(2, n)
@@ -240,7 +213,7 @@ def parse_model(d, ch):  # model_dict, input_channels(3)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--cfg', type=str, default='yolov4-p5.yaml', help='model.yaml')
+    parser.add_argument('--cfg', type=str, default='yolov4-csp.yaml', help='model.yaml')
     parser.add_argument('--device', default='', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
     opt = parser.parse_args()
     opt.cfg = check_file(opt.cfg)  # check file
@@ -249,18 +222,3 @@ if __name__ == '__main__':
     # Create model
     model = Model(opt.cfg).to(device)
     model.train()
-
-    # Profile
-    # img = torch.rand(8 if torch.cuda.is_available() else 1, 3, 640, 640).to(device)
-    # y = model(img, profile=True)
-
-    # ONNX export
-    # model.model[-1].export = True
-    # torch.onnx.export(model, img, opt.cfg.replace('.yaml', '.onnx'), verbose=True, opset_version=11)
-
-    # Tensorboard
-    # from torch.utils.tensorboard import SummaryWriter
-    # tb_writer = SummaryWriter()
-    # print("Run 'tensorboard --logdir=models/runs' to view tensorboard at http://localhost:6006/")
-    # tb_writer.add_graph(model.model, img)  # add model to tensorboard
-    # tb_writer.add_image('test', img[0], dataformats='CWH')  # add model to tensorboard
