@@ -13,7 +13,6 @@ import torchvision.models as models
 def init_seeds(seed=0):
     torch.manual_seed(seed)
 
-    # Speed-reproducibility tradeoff https://pytorch.org/docs/stable/notes/randomness.html
     if seed == 0:  # slower, more reproducible
         cudnn.deterministic = True
         cudnn.benchmark = False
@@ -101,7 +100,6 @@ def prune(model, amount=0.3):
 
 
 def fuse_conv_and_bn(conv, bn):
-    # https://tehnokv.com/posts/fusing-batchnorm-and-conv/
     with torch.no_grad():
         # init
         fusedconv = nn.Conv2d(conv.in_channels,
@@ -138,7 +136,7 @@ def model_info(model, verbose=False):
     try:  # FLOPS
         from thop import profile
         flops = profile(deepcopy(model), inputs=(torch.zeros(1, 3, 64, 64),), verbose=False)[0] / 1E9 * 2
-        fs = ', %.1f GFLOPS' % (flops * 100)  # 640x640 FLOPS
+        fs = ', %.1f GFLOPS' % (flops * 100)
     except:
         fs = ''
 
@@ -175,7 +173,7 @@ def scale_img(img, ratio=1.0, same_shape=False):  # img(16,3,256,416), r=ratio
         s = (int(h * ratio), int(w * ratio))  # new size
         img = F.interpolate(img, size=s, mode='bilinear', align_corners=False)  # resize
         if not same_shape:  # pad/crop img
-            gs = 128#64#32  # (pixels) grid size
+            gs = 128  # (pixels) grid size
             h, w = [math.ceil(x * ratio / gs) * gs for x in (h, w)]
         return F.pad(img, [0, w - s[1], 0, h - s[0]], value=0.447)  # value = imagenet mean
 
@@ -202,8 +200,6 @@ class ModelEMA:
     def __init__(self, model, decay=0.9999, updates=0):
         # Create EMA
         self.ema = deepcopy(model.module if is_parallel(model) else model).eval()  # FP32 EMA
-        # if next(model.parameters()).device.type != 'cpu':
-        #     self.ema.half()  # FP16 EMA
         self.updates = updates  # number of EMA updates
         self.decay = lambda x: decay * (1 - math.exp(-x / 2000))  # decay exponential ramp (to help early epochs)
         for p in self.ema.parameters():
