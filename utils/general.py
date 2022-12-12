@@ -1326,8 +1326,6 @@ def plot_results_overlay(start=0, stop=0):
             for j in [i, i + 5]:
                 y = results[j, x]
                 ax[i].plot(x, y, marker='.', label=s[j])
-                # y_smooth = butter_lowpass_filtfilt(y)
-                # ax[i].plot(x, np.gradient(y_smooth), marker='.', label=s[j])
 
             ax[i].set_title(t[i])
             ax[i].legend()
