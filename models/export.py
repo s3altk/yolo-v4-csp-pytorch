@@ -1,20 +1,18 @@
 import argparse
-
 import torch
-
 from utils.google_utils import attempt_download
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--weights', type=str, default='./yolov4-p5.pt', help='weights path')
-    parser.add_argument('--img-size', nargs='+', type=int, default=[640, 640], help='image size')
+    parser.add_argument('--weights', type=str, default='', help='weights path')
+    parser.add_argument('--img-size', nargs='+', type=int, default=[608, 608], help='image size')
     parser.add_argument('--batch-size', type=int, default=1, help='batch size')
     opt = parser.parse_args()
     opt.img_size *= 2 if len(opt.img_size) == 1 else 1  # expand
     print(opt)
 
     # Input
-    img = torch.zeros((opt.batch_size, 3, *opt.img_size))  # image size(1,3,320,192) iDetection
+    img = torch.zeros((opt.batch_size, 3, *opt.img_size))  # image size
 
     # Load PyTorch model
     attempt_download(opt.weights)
