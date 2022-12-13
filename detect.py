@@ -3,13 +3,12 @@ import os
 import platform
 import shutil
 import time
-from pathlib import Path
-
 import cv2
 import torch
 import torch.backends.cudnn as cudnn
-from numpy import random
 
+from pathlib import Path
+from numpy import random
 from models.experimental import attempt_load
 from utils.datasets import LoadStreams, LoadImages
 from utils.general import (
