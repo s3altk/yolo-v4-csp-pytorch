@@ -1,8 +1,10 @@
 # This file contains modules common to various models
 import math
-
+import os
+import collections
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 from mish_cuda import MishCuda as Mish
 
@@ -187,13 +189,6 @@ class Classify(nn.Module):
         z = torch.cat([self.aap(y) for y in (x if isinstance(x, list) else [x])], 1)  # cat if list
         return self.flat(self.conv(z))  # flatten to x(b,c2)
 
-    
-import os
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-import collections
-
 
 class CombConvLayer(nn.Sequential):
     def __init__(self, in_channels, out_channels, kernel=1, stride=1, dropout=0.1, bias=False):
@@ -208,14 +203,11 @@ class DWConvLayer(nn.Sequential):
     def __init__(self, in_channels, out_channels,  stride=1,  bias=False):
         super().__init__()
         out_ch = out_channels
-        
         groups = in_channels
         kernel = 3
-        #print(kernel, 'x', kernel, 'x', out_channels, 'x', out_channels, 'DepthWise')
-        
-        self.add_module('dwconv', nn.Conv2d(groups, groups, kernel_size=3,
-                                          stride=stride, padding=1, groups=groups, bias=bias))
+        self.add_module('dwconv', nn.Conv2d(groups, groups, kernel_size=3, stride=stride, padding=1, groups=groups, bias=bias))
         self.add_module('norm', nn.BatchNorm2d(groups))
+    
     def forward(self, x):
         return super().forward(x)  
 
@@ -224,11 +216,10 @@ class ConvLayer(nn.Sequential):
         super().__init__()
         out_ch = out_channels
         groups = 1
-        #print(kernel, 'x', kernel, 'x', in_channels, 'x', out_channels)
-        self.add_module('conv', nn.Conv2d(in_channels, out_ch, kernel_size=kernel,          
-                                          stride=stride, padding=kernel//2, groups=groups, bias=bias))
+        self.add_module('conv', nn.Conv2d(in_channels, out_ch, kernel_size=kernel, stride=stride, padding=kernel//2, groups=groups, bias=bias))
         self.add_module('norm', nn.BatchNorm2d(out_ch))
-        self.add_module('relu', nn.ReLU6(True))                                          
+        self.add_module('relu', nn.ReLU6(True))
+
     def forward(self, x):
         return super().forward(x)
 
@@ -273,7 +264,6 @@ class HarDBlock(nn.Module):
 
             if (i % 2 == 0) or (i == n_layers - 1):
                 self.out_channels += outch
-        #print("Blk out =",self.out_channels)
         self.layers = nn.ModuleList(layers_)
         
     def forward(self, x):
@@ -352,13 +342,11 @@ class HarDBlock2(nn.Module):
         for i in range(n_layers):
             accum_out_ch = sum( self.out_partition[i] )
             real_out_ch = self.out_partition[i][0]
-            #print( self.links[i],  self.out_partition[i], accum_out_ch)
             conv_layers_.append( nn.Conv2d(cur_ch, accum_out_ch, kernel_size=3, stride=1, padding=1, bias=True) )
             bnrelu_layers_.append( BRLayer(real_out_ch) )
             cur_ch = real_out_ch
             if (i % 2 == 0) or (i == n_layers - 1):
                 self.out_channels += real_out_ch
-        #print("Blk out =",self.out_channels)
 
         self.conv_layers = nn.ModuleList(conv_layers_)
         self.bnrelu_layers = nn.ModuleList(bnrelu_layers_)
@@ -385,9 +373,6 @@ class HarDBlock2(nn.Module):
                     self.conv_layers[i].bias[part[0]:] = 0
                     self.layer_bias[i] = None
                 else:
-                    #for pytorch, add bias with standalone tensor is more efficient than within conv.bias
-                    #this is because the amount of non-zero bias is small, 
-                    #but if we use conv.bias, the number of bias will be much larger
                     self.conv_layers[i].bias = None
             else:
                 self.conv_layers[i].bias = None 
@@ -405,7 +390,6 @@ class HarDBlock2(nn.Module):
                     chie = chis + link_ch[j]
                     self.conv_layers[ly].weight[chos:choe, :,:,:] = w_src[:, chis:chie,:,:]
             
-            #update BatchNorm or remove it if there is no BatchNorm in the v1 block
             self.bnrelu_layers[i] = None
             if isinstance(blk.layers[i][1], nn.BatchNorm2d):
                 self.bnrelu_layers[i] = nn.Sequential(
@@ -427,9 +411,6 @@ class HarDBlock2(nn.Module):
             layers_.append(xout)
 
             xin = xout[:,0:part[0],:,:] if len(part) > 1 else xout
-            #print(i)
-            #if self.layer_bias[i] is not None:
-            #    xin += self.layer_bias[i].view(1,-1,1,1)
 
             if len(link) > 1:
                 for j in range( len(link) - 1 ):
@@ -474,154 +455,3 @@ class ConvSqu(nn.Module):
 
     def fuseforward(self, x):
         return self.act(self.conv(x))
-
-'''
-class SE(nn.Module):
-    # Squeeze-and-excitation block in https://arxiv.org/abs/1709.01507
-    def __init__(self, c1, c2, n=1, shortcut=True, g=8, e=0.5):  # ch_in, ch_out, number, shortcut, groups, expansion
-        super(SE, self).__init__()
-        c_ = int(c2)  # hidden channels
-        self.avg_pool = nn.AdaptiveAvgPool2d(1)
-        self.cs = ConvSqu(c1, c1//g, 1, 1)
-        self.cvsig = ConvSig(c1//g, c1, 1, 1)
-
-    def forward(self, x):
-        return x = x * self.cvsig(self.cs(self.avg_pool(x))).expand_as(x)
-    
-class SAM(nn.Module):
-    # SAM block in yolov4
-    def __init__(self, c1, c2, n=1, shortcut=True, g=1, e=0.5):  # ch_in, ch_out, number, shortcut, groups, expansion
-        super(SAM, self).__init__()
-        c_ = int(c2 * e)  # hidden channels
-        self.cvsig = ConvSig(c1, c1, 1, 1)
-
-    def forward(self, x):
-        return x = x * self.cvsig(x)
-    
-class DNL(nn.Module):
-    # Disentangled Non-Local block in https://arxiv.org/abs/2006.06668
-    def __init__(self, c1, c2, k=3, s=1):
-        super(DNL, self).__init__()
-        c_ = int(c1)  # hidden channels
-        
-        # 
-        self.conv_query = nn.Conv2d(c1, c_, kernel_size=1)
-        self.conv_key = nn.Conv2d(c1, c_, kernel_size=1)
-        
-        self.conv_value = nn.Conv2d(c1, c1, kernel_size=1, bias=False)
-        self.conv_out = None
-        
-        self.scale = math.sqrt(c_)
-        self.temperature = 0.05
-        
-        self.softmax = nn.Softmax(dim=2)
-        
-        self.gamma = nn.Parameter(torch.zeros(1))
-        
-        self.conv_mask = nn.Conv2d(c1, 1, kernel_size=1)
-                
-        self.cv = Conv(c1, c2, k, s)
-
-    def forward(self, x):
-
-        # [N, C, T, H, W]
-        residual = x
-        
-        # [N, C, T, H', W']        
-        input_x = x
-
-        # [N, C', T, H, W]
-        query = self.conv_query(x)
-        
-        # [N, C', T, H', W']
-        key = self.conv_key(input_x)
-        value = self.conv_value(input_x)
-
-        # [N, C', H x W]
-        query = query.view(query.size(0), query.size(1), -1)
-        
-        # [N, C', H' x W']
-        key = key.view(key.size(0), key.size(1), -1)
-        value = value.view(value.size(0), value.size(1), -1)
-        
-        # channel whitening
-        key_mean = key.mean(2).unsqueeze(2)
-        query_mean = query.mean(2).unsqueeze(2)
-        key -= key_mean
-        query -= query_mean
-
-        # [N, T x H x W, T x H' x W']
-        sim_map = torch.bmm(query.transpose(1, 2), key)
-        sim_map = sim_map/self.scale
-        sim_map = sim_map/self.temperature
-        sim_map = self.softmax(sim_map)
-
-        # [N, T x H x W, C']
-        out_sim = torch.bmm(sim_map, value.transpose(1, 2))
-        
-        # [N, C', T x H x W]
-        out_sim = out_sim.transpose(1, 2)
-        
-        # [N, C', T,  H, W]
-        out_sim = out_sim.view(out_sim.size(0), out_sim.size(1), *x.size()[2:])
-        out_sim = self.gamma * out_sim
-        
-        # [N, 1, H', W']
-        mask = self.conv_mask(input_x)
-        # [N, 1, H'x W']
-        mask = mask.view(mask.size(0), mask.size(1), -1)
-        mask = self.softmax(mask)
-        # [N, C, 1, 1]
-        out_gc = torch.bmm(value, mask.permute(0,2,1)).unsqueeze(-1)
-        out_sim = out_sim+out_gc
-
-        return self.cv(out_sim + residual)
-
-
-class GC(nn.Module):
-    # global context block in https://arxiv.org/abs/1904.11492
-    def __init__(self, c1, c2, k=3, s=1):
-        super(GC, self).__init__()
-        c_ = int(c1)  # hidden channels
-        
-        #             
-        self.channel_add_conv = nn.Sequential(
-            nn.Conv2d(c1, c_, kernel_size=1),
-            nn.LayerNorm([c_, 1, 1]),
-            nn.ReLU(inplace=True),  # yapf: disable
-            nn.Conv2d(c_, c1, kernel_size=1))
-        
-        self.conv_mask = nn.Conv2d(c_, 1, kernel_size=1)
-        self.softmax = nn.Softmax(dim=2)
-                
-        self.cv = Conv(c1, c2, k, s)
-        
-        
-    def spatial_pool(self, x):
-        
-        batch, channel, height, width = x.size()
-        
-        input_x = x        
-        # [N, C, H * W]
-        input_x = input_x.view(batch, channel, height * width)
-        # [N, 1, C, H * W]
-        input_x = input_x.unsqueeze(1)
-        # [N, 1, H, W]
-        context_mask = self.conv_mask(x)
-        # [N, 1, H * W]
-        context_mask = context_mask.view(batch, 1, height * width)
-        # [N, 1, H * W]
-        context_mask = self.softmax(context_mask)
-        # [N, 1, H * W, 1]
-        context_mask = context_mask.unsqueeze(-1)
-        # [N, 1, C, 1]
-        context = torch.matmul(input_x, context_mask)
-        # [N, C, 1, 1]
-        context = context.view(batch, channel, 1, 1)
-
-        return context
-
-    def forward(self, x):
-
-        return self.cv(x + self.channel_add_conv(self.spatial_pool(x)))
-'''
