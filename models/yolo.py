@@ -1,11 +1,10 @@
 import argparse
 import math
-from copy import deepcopy
-from pathlib import Path
-
 import torch
 import torch.nn as nn
 
+from copy import deepcopy
+from pathlib import Path
 from models.common import *
 from models.experimental import MixConv2d, CrossConv, C3
 from utils.general import check_anchor_order, make_divisible, check_file
