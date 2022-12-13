@@ -3,22 +3,23 @@ import math
 import os
 import random
 import time
-from pathlib import Path
-
+import yaml
 import numpy as np
+import test  # import test.py to get mAP after each epoch
+
 import torch.distributed as dist
 import torch.nn.functional as F
 import torch.optim as optim
 import torch.optim.lr_scheduler as lr_scheduler
 import torch.utils.data
-import yaml
+
 from torch.cuda import amp
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.tensorboard import SummaryWriter
-from tqdm import tqdm
 
-import test  # import test.py to get mAP after each epoch
+from pathlib import Path
 from models.yolo import Model
+from tqdm import tqdm
 from utils.datasets import create_dataloader
 from utils.general import (
     check_img_size, torch_distributed_zero_first, labels_to_class_weights, plot_labels, check_anchors,
