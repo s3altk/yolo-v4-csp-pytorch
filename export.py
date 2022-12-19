@@ -8,29 +8,20 @@ if __name__ == '__main__':
     parser.add_argument('--weights', type=str, default='', help='weights path')
     parser.add_argument('--img-size', nargs='+', type=int, default=[608, 608], help='image size')
     parser.add_argument('--batch-size', type=int, default=1, help='batch size')
+    
     opt = parser.parse_args()
-    opt.img_size *= 2 if len(opt.img_size) == 1 else 1  # expand
     print(opt)
 
-    # Input
-    img = torch.zeros((opt.batch_size, 3, *opt.img_size))  # image size
+    # Initialize model with the pretrained weights
+    torch_model = torch.load(opt.weights, map_location=torch.device('cpu'))['model'].float()
 
-    # Load PyTorch model
-    attempt_download(opt.weights)
-    model = torch.load(opt.weights, map_location=torch.device('cpu'))['model'].float()
-    model.eval()
-    model.model[-1].export = True  # set Detect() layer export=True
-    y = model(img)  # dry run
+    # Set the model to inference mode
+    torch_model.eval()
+    torch_model.model[-1].export = True  # set Detect() layer export=True
 
-    # TorchScript export
-    try:
-        print('\nStarting TorchScript export with torch %s...' % torch.__version__)
-        f = opt.weights.replace('.pt', '.torchscript.pt')  # filename
-        ts = torch.jit.trace(model, img)
-        ts.save(f)
-        print('TorchScript export success, saved as %s' % f)
-    except Exception as e:
-        print('TorchScript export failure: %s' % e)
+    # Input to the model
+    x = torch.zeros((opt.batch_size, 3, *opt.img_size))  # image size (1,3,608,608)
+    torch_out = torch_model(x)
 
     # ONNX export
     try:
@@ -38,30 +29,27 @@ if __name__ == '__main__':
 
         print('\nStarting ONNX export with onnx %s...' % onnx.__version__)
         f = opt.weights.replace('.pt', '.onnx')  # filename
-        model.fuse()  # only for ONNX
-        torch.onnx.export(model, img, f, verbose=False, opset_version=12, input_names=['images'],
-                          output_names=['classes', 'boxes'] if y is None else ['output'])
+        
+        # Export the model
+        torch.onnx.export(torch_model,               # model being run
+                  x,                                 # model input (or a tuple for multiple inputs)
+                  f,                                 # where to save the model (can be a file or file-like object)
+                  export_params=True,                # store the trained parameter weights inside the model file
+                  opset_version=11,                  # the ONNX version to export the model to
+                  do_constant_folding=True,          # whether to execute constant folding for optimization
+                  input_names = ['input'],           # the model's input names
+                  output_names = ['output'],         # the model's output names
+                  dynamic_axes={'input' : {0 : 'batch_size'},    # variable length axes
+                                'output' : {0 : 'batch_size'}})
 
         # Checks
         onnx_model = onnx.load(f)  # load onnx model
         onnx.checker.check_model(onnx_model)  # check onnx model
         print(onnx.helper.printable_graph(onnx_model.graph))  # print a human readable model
+        
         print('ONNX export success, saved as %s' % f)
     except Exception as e:
         print('ONNX export failure: %s' % e)
-
-    # CoreML export
-    try:
-        import coremltools as ct
-
-        print('\nStarting CoreML export with coremltools %s...' % ct.__version__)
-        # convert model from torchscript and apply pixel scaling as per detect.py
-        model = ct.convert(ts, inputs=[ct.ImageType(name='images', shape=img.shape, scale=1 / 255.0, bias=[0, 0, 0])])
-        f = opt.weights.replace('.pt', '.mlmodel')  # filename
-        model.save(f)
-        print('CoreML export success, saved as %s' % f)
-    except Exception as e:
-        print('CoreML export failure: %s' % e)
 
     # Finish
     print('\nExport complete. Visualize with https://github.com/lutzroeder/netron.')
