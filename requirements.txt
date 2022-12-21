@@ -24,11 +24,11 @@ pandas>=1.1.4
 seaborn>=0.11.0
 
 # Export ----------------------------------------------------------------------
-# coremltools>=6.0  # CoreML export
-# onnx>=1.9.0  # ONNX export
+onnx>=1.9.0  # ONNX export
 # onnx-simplifier>=0.4.1  # ONNX simplifier
 # nvidia-pyindex  # TensorRT export
 # nvidia-tensorrt  # TensorRT export
+# coremltools>=6.0  # CoreML export
 # scikit-learn<=1.1.2  # CoreML quantization
 # tensorflow>=2.4.1  # TF exports (-cpu, -aarch64, -macos)
 # tensorflowjs>=3.9.0  # TF.js export
@@ -38,7 +38,7 @@ seaborn>=0.11.0
 # tritonclient[all]~=2.24.0
 
 # Extras ----------------------------------------------------------------------
+roboflow
+pycocotools>=2.0  # COCO mAP
 # mss  # screenshots
 # albumentations>=1.0.3
-# pycocotools>=2.0  # COCO mAP
-# roboflow
