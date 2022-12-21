@@ -1,8 +1,6 @@
 import argparse
 import torch
 
-from utils.google_utils import attempt_download
-
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--weights', type=str, default='', help='weights path')
