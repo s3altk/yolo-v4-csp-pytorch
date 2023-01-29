@@ -2,6 +2,7 @@ import argparse
 import torch
 import numpy as np
 import warnings
+import time
 
 from utils.torch_utils import select_device
 from models.experimental import attempt_load
